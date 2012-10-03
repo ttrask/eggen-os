@@ -1,0 +1,31 @@
+all: semdemo semincr seminit semrm semval 
+
+semdemo: semdemo.o
+	cc -o semdemo semdemo.o
+
+semincr: semincr.o
+	cc -o semincr semincr.o
+
+semdemo.o: semdemo.c
+	cc -c semdemo.c
+
+seminit: seminit.o
+	cc -o seminit seminit.o 
+
+seminit.o: seminit.c
+	cc -c seminit.c 
+
+semrm: semrm.o
+	cc -o semrm semrm.o
+
+semrm.o: semrm.c
+	cc -c semrm.c
+
+semval: semval.o
+	cc -o semval semval.o
+
+semval.o: semval.c
+	cc -c semval.c
+
+semincr.o: semincr.c
+	cc -c semincr.c
