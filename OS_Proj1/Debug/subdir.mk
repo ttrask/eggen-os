@@ -7,22 +7,13 @@ O_SRCS += \
 ../proj1.o 
 
 C_SRCS += \
-../forkManyProcs.c \
-../proj1.c \
-../semdemo.c \
-../seminit.c 
+../proj1.c 
 
 OBJS += \
-./forkManyProcs.o \
-./proj1.o \
-./semdemo.o \
-./seminit.o 
+./proj1.o 
 
 C_DEPS += \
-./forkManyProcs.d \
-./proj1.d \
-./semdemo.d \
-./seminit.d 
+./proj1.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes

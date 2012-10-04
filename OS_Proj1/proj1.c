@@ -143,8 +143,8 @@ int main(int argc, char *argv[]) {
 			break;
 		case 0:
 
-			printf("producer created with id=%d, pid=%d\n", prodIds[i],
-					getpid());
+			//printf("producer created with id=%d, pid=%d\n", prodIds[i],
+//					getpid());
 //			printf("Queue Full Semaphore: %d\n",					semctl(semid, fullSem, GETVAL, arg.sem_num));
 			for (i = 0; i < itemCount; i++) {
 				int hasAddedToQueue = 0;
@@ -170,17 +170,26 @@ int main(int argc, char *argv[]) {
 						for (j = 0; j < queueSize; j++) {
 							if (queuePtr[j] == -1) {
 								if (queuePtr[queueSize + 1] >= totalItems) {
-									printf("Completed Producing %d items",
-											totalItems);
+//									printf("Completed Producing %d items",
+//											totalItems);
+//									printf("exiting producer");
 									exit(0);
 								}
 
 								//do your stuff
 								queuePtr[j] = itemsProduced;
 								queuePtr[queueSize + 1]++;
+
+
 								printf(
-										"Produced Item %d of %d at queue Position %d\n",
-										queuePtr[queueSize + 1], totalItems, j);
+										"%d\t%d\t%d\t%d\t%d\t%d\t%s\t%d\t%d\t\n",
+										getpid(),
+										0,
+										1,
+										semctl(semid, emptySem, GETVAL, arg.sem_num),
+										semctl(semid, fullSem, GETVAL, arg.sem_num),
+										semctl(semid, accessSem, GETVAL, arg.sem_num),
+										"Produce", queuePtr[queueSize+1], queuePtr[queueSize]);
 								//unlock it
 
 								itemsProduced++;
@@ -199,7 +208,7 @@ int main(int argc, char *argv[]) {
 						//if the queue is full, lock the queue
 						if (fullCount == queueSize || hasAddedToQueue == 0) {
 							hasAddedToQueue = 1;
-							LockSemaphore(semid, fullSem);
+							//LockSemaphore(semid, fullSem);
 						}
 					} else {
 
@@ -208,6 +217,7 @@ int main(int argc, char *argv[]) {
 				}
 			}
 
+			//printf("Exiting Producer Process %d\n", getpid());
 			exit(EXIT_SUCCESS);
 			break;
 
@@ -218,7 +228,7 @@ int main(int argc, char *argv[]) {
 			if ((prodIds[i] = wait(&status)) == -1) {
 				perror("error waiting for children to complete.\n");
 
-			} else if (WIFEXITED(status) != 0) {
+			} else {
 				printf("Child process ended normally.n");
 				producersDone = 1;
 			}
@@ -247,10 +257,10 @@ int main(int argc, char *argv[]) {
 				if (semctl(semid, emptySem, GETVAL, arg.sem_num) > 0) {
 					//consume item.
 					int foundValue = 0;
-					while (semctl(semid, accessSem, GETVAL, arg.sem_num)
-													<= 0) {
-												usleep(waitTime);
-											}
+
+					while (semctl(semid, accessSem, GETVAL, arg.sem_num) <= 0) {
+						usleep(waitTime);
+					}
 					LockSemaphore(semid, accessSem);
 
 					for (j = 0; j < queueSize; j++) {
@@ -259,9 +269,16 @@ int main(int argc, char *argv[]) {
 
 							queuePtr[queueSize]++;
 
+
 							printf(
-									"Consumed Item %d at queue position %d for a total of %d items consumed\n",
-									queuePtr[j], j, queuePtr[queueSize]);
+									"%d\t%d\t%d\t%d\t%d\t%d\t%s\t%d\t%d\t\n",
+									getpid(),
+									0,
+									1,
+									semctl(semid, emptySem, GETVAL, arg.sem_num),
+									semctl(semid, fullSem, GETVAL, arg.sem_num),
+									semctl(semid, accessSem, GETVAL, arg.sem_num),
+									"Consume", queuePtr[queueSize+1], queuePtr[queueSize]);
 							queuePtr[j] = -1;
 							//increments total items consumed
 							emptyCount++;
@@ -273,7 +290,11 @@ int main(int argc, char *argv[]) {
 							}
 
 							if (queuePtr[queueSize] >= totalItems) {
-								printf("All consumption has been completed.");
+								if (queuePtr[queueSize] == totalItems) {
+									printf(
+											"All consumption has been completed.\n");
+								}
+								//printf("Exiting Consumer Thread %d", getpid());
 								exit(0);
 								//all consumption is done.
 							}
@@ -284,14 +305,15 @@ int main(int argc, char *argv[]) {
 					UnlockSemaphore(semid, accessSem);
 
 					if (fullCount <= 0 || foundValue == 0) {
-						LockSemaphore(semid, emptySem);
+						//LockSemaphore(semid, emptySem);
 
 					}
 				} else {
 					usleep(waitTime);
 				}
 			}
-			exit(0);
+
+			printf("Exiting Consumer Process %d\n", getpid());
 			break;
 
 		case 1:
@@ -315,20 +337,22 @@ int main(int argc, char *argv[]) {
 //	printf("press any key to deallocate semaphore\n" );
 //	getchar();
 
-	for (i = 0; i < producerCount; i++) {
-		if (waitpid(prodIds[i], &status, 0) == -1)
-			printf("Error exiting child process");
+//	for (i = 0; i < producerCount; i++) {
+//		if (waitpid(prodIds[i], &status, 0) == -1)
+//			printf("Error exiting child process");
+//
+//	}
+//	for (i = 0; i < consumerCount; i++) {
+//		if (waitpid(consIds[i], &status, 0) == -1)
+//			printf("Error exiting child process");
+//
+//	}
 
-	}
-	for (i = 0; i < consumerCount; i++) {
-		if (waitpid(consIds[i], &status, 0) == -1)
-			printf("Error exiting child process");
-
-	}
+	while (wait(&status) > 0)
 
 //deallocate shared memory
 
-	shmdt(sharedMemPtr);
+		shmdt(sharedMemPtr);
 //delete allocated semaphores
 	semctl(semid, 0, IPC_RMID);
 
@@ -377,7 +401,7 @@ void SetCLIValues(char *arg, int i) {
 
 void LockSemaphore(int id, int i) {
 
-	printf("Locking semaphore %d\n", i);
+	//printf("Locking semaphore %d\n", i);
 
 	if (semctl(id, i, GETVAL, NULL) == -1) {
 		printf("Semaphore already locked!");
@@ -392,7 +416,7 @@ void LockSemaphore(int id, int i) {
 }
 
 void UnlockSemaphore(int id, int i) {
-	printf("Unlocking semaphore %d\n", i);
+	//printf("Unlocking semaphore %d\n", i);
 
 	struct sembuf sb;
 	sb.sem_num = i;
