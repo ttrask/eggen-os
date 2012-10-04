@@ -1,0 +1,1 @@
+semdemo.d: ../semdemo.c

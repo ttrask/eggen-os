@@ -1,0 +1,1 @@
+seminit.d: ../seminit.c
