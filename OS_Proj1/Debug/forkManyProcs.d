@@ -1,0 +1,1 @@
+forkManyProcs.d: ../forkManyProcs.c

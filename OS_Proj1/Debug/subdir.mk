@@ -3,17 +3,26 @@
 ################################################################################
 
 # Add inputs and outputs from these tool invocations to the build variables 
+O_SRCS += \
+../proj1.o 
+
 C_SRCS += \
-../os1.c \
-../os2.c 
+../forkManyProcs.c \
+../proj1.c \
+../semdemo.c \
+../seminit.c 
 
 OBJS += \
-./os1.o \
-./os2.o 
+./forkManyProcs.o \
+./proj1.o \
+./semdemo.o \
+./seminit.o 
 
 C_DEPS += \
-./os1.d \
-./os2.d 
+./forkManyProcs.d \
+./proj1.d \
+./semdemo.d \
+./seminit.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
