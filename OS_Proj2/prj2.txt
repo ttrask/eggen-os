@@ -1,0 +1,130 @@
+ Project 2 Operating Systems Due 18 Oct. 2012  at 11:59 PM
+
+This object of this program is to implement a critical section (CS) 
+by message passing.  The messages are sent down Unix pipes.  
+There are three operations performed on the pipes:  create, read 
+and write.
+
+The STORE_MANAGER receives messages from PROC1 and PROC2 (clients) 
+through the pipes P1 and P2, respectively. It responds to messages 
+from PROC1 by placing the responses in the pipe P3 and responds 
+to messages from PROC2 by placing the responses in the pipe P4. 
+Each message as it is sent or received is time-stamped and logged 
+in the file 'LOG.DAT' by the STORE_MANAGER and by the PROCi processes.
+
+The STORE_MANAGER keeps in a TABLE, an array of size SIZE, pairs ID and VALUE.
+
+ The TABLE is a structure
+of the form
+
+    struct {
+      char id[NAME_SIZE+1]; 
+      int value;
+    } TABLE[SIZE];
+
+
+
+The ids and values kept in TABLE are read from the file
+'INIT.DAT' one record per line.
+
+The INIT.DAT file might look like:
+
+ NETSCAPE  4
+ MICROSOFT 22
+ DISNEY  3
+ CHEV_BORDER 4
+ FINOVA 5
+ HALLWOOD 15
+ LASMO_HONDA  56
+
+On the TABLE are carried out two operations, TABLE_UPDATE
+and TABLE_READ.
+
+Function headers/definitions are of the form:
+
+  int TABLE_UPDATE (TABLE_ID WHO, TABLE_ELEM VAL) 
+    /* adds the value VAL of WHO to current value. 
+      returns 0 if successful} VAL could be negative */
+
+   int TABLE_READ (TABLE_ID WHO, TABLE_ELEM * VAL) 
+    /* retrieves the value of WHO and stores it in VAL.
+      returns 0 if successful */
+
+Here is how the STORE_MANAGER should behave:
+
+   STORE_MANAGER:
+       initialization (including opening LOG.DAT in
+          append+write mode, opening and reading INIT.DAT to 
+          initialize TABLE);
+       loop
+            wait for the arrival of a new request; 
+            log the message and start the corresponding operation;
+       end loop;
+
+STORE_MANAGER receives messages that consist of, in sequence:
+
+    o An Origin Code ['1' for PROC1, '2' for PROC2] 
+    o An Origin id [the process id of the sending process]
+    o A message code ['U' for TABLE_UPDATE, 'R' for TABLE_READ] 
+    o The  operands required by the corresponding operation 
+          [hence for TABLE_UPDATE, the 'U' will be followed by a
+          TABLE_ID id and by a TABLE_ELEM value, 
+          while for TABLE_READ, the 'R' will be followed only 
+          by TABLE_ID.]
+
+The STORE_MANAGER responses consist of the character representing the operation requested, followed by the
+result of the operation ['0' for success, '1' for failure], followed by the values involved in the operation [both
+TABLE_ID and TABLE_ELEM].
+
+PROC1 and PROC2 have the same form 
+   [but read from alternate files]
+
+   PROCi:
+       initialization (including opening LOG.DAT in
+       append+write mode);
+       loop
+            read TRANSi which will contain R or U for
+            TABLE_READ or TABLE_UPDATE respectively, 
+            followed by the TABLE_ID, and TABLE_ELEM for U .
+         /* ie R NETSCAPE   or U NETSCAPE 5   */
+            send the request and log it; 
+            wait for the corresponding response and log it; 
+            wait some time [about 3 seconds];
+        /* PROCi should immediately respond to signals */
+        end loop;
+        /* once the file has been read, the process should
+           go into a wait state, waiting for signals from 
+           the parent */
+   end PROCi
+      
+
+HMW_MAIN, after starting the other processes, in a loop prompts the users to ask if they want to see statistical
+information from PROC1 and PROC2. The executable for the project is called p2. To run the program enter p2 
+with command line arguments the names of four files [for convenience in the following it is assumed these names are 
+INIT.DAT, LOG.DAT, and TRANSi, but they could be any name].
+
+
+The program consists of the following files:
+header.h, p2.c, and a makefile.
+
+To run the program enter:
+
+p2 INIT.DAT LOG.DAT TRANS1 TRANS2
+
+Submission should use the turnin program. For example,
+
+turnin fn ree4610_2
+
+where fn is a shar file containing the following files:
+
+source code
+makefile
+documentation -- a text file called p2.txt
+   see the syllabus for contents of the documentation file
+tests-results
+any other necessary files
+
+
+
+
+ 
