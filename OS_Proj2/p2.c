@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <ctype.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/ipc.h>
@@ -19,16 +20,24 @@
 #include <string.h>
 
 int LoadTable();
-pid_t ForkProcess();
-int KillProcess(pid_t);
+int ForkProcess();
+int KillProcess(int);
 int AllocateSharedMemory();
 int DeallocateSharedMemory();
-int ReadFromPipe(int, int[]);
+char* ProcessMessage(char[]);
+int GetThreadedMessages(int, int[], int[]);
 char* RemoveNewline(char*);
-char* AddNewline(char[]);
-
+FILE* OpenLogFile();
+int ReadFromPipe(int pid, int pipe[], char msg[]);
+int WriteToPipe(int pid, int pipe[], char* msg);
+int TABLE_UPDATE(char* id, int val);
+int TABLE_READ(char* id, int* val);
+int WriteToLogFile(int pid, char* msg, short SendRecieved);
 
 char* exitCmd = "exit\n";
+char* logFileName = "LOG.DAT";
+char* trans1FileName = "TRANS1.txt";
+char* trans2FileName = "TRANS2.txt";
 const int SIZE = 20;
 int _tblSize = 0;
 
@@ -42,15 +51,16 @@ TABLE* tbl;
 int sharedMemId;
 TABLE* sharedMemPtr;
 
-pid_t p1, p2;
-int pipe1[2], pipe2[2], nbytes;
+int p1, p2;
+int pipe1[2], pipe2[2], pipe3[2], pipe4[2], nbytes;
 int pipe1Done = 0, pipe2Done = 0;
 
 int main() {
 
 	pipe(pipe1);
-
 	pipe(pipe2);
+	pipe(pipe3);
+	pipe(pipe4);
 
 	//allocate shared memory
 	AllocateSharedMemory();
@@ -59,8 +69,8 @@ int main() {
 	LoadTable();
 
 	//fork 2 processes
-	ForkProcess(p1, "TRANS1.txt", pipe1);
-	ForkProcess(p2, "TRANS2.txt", pipe2);
+	ForkProcess(p1, trans1FileName, pipe1, pipe3);
+	ForkProcess(p2, trans2FileName, pipe2, pipe4);
 
 	int quit = 0;
 	char userInput;
@@ -68,10 +78,10 @@ int main() {
 	while (quit == 0) {
 
 		if (pipe1Done == 0)
-			ReadFromPipe(1, pipe1);
+			GetThreadedMessages(1, pipe1, pipe3);
 
 		if (pipe2Done == 0)
-			ReadFromPipe(2, pipe2);
+			GetThreadedMessages(2, pipe2, pipe4);
 
 		usleep(100);
 	}
@@ -89,11 +99,11 @@ int main() {
 	return 0;
 }
 
-int ReadFromPipe(int pid, int pipe[]) {
+int GetThreadedMessages(int pid, int readPipe[], int writePipe[]) {
 
 	char readBuffer[80];
 
-	read(pipe[0], readBuffer, sizeof(readBuffer));
+	ReadFromPipe(0, readPipe, readBuffer);
 
 	if (strlen(readBuffer) > 0) {
 
@@ -108,40 +118,81 @@ int ReadFromPipe(int pid, int pipe[]) {
 			}
 		}
 
-		//char* command = AddNewline(readBuffer);
+		printf("Received String from process %d: %s\n", pid,
+				RemoveNewline(readBuffer));
+		char* msg = ProcessMessage(readBuffer);
 
-		printf("Received String from process %d: %s", pid, readBuffer);
-
-//		if (readBuffer[sizeof(readBuffer) - 1] != '\n')
-//			printf("\n");
-
-		ProcessMessage(readBuffer);
+		//sends response to write pipe.
+		WriteToPipe(0, writePipe, msg);
 	}
+
+	//free(readBuffer);
 
 	return 0;
 }
 
-int ProcessMessage(char* msg) {
+int ReadFromPipe(int pid, int pipe[], char msg[]) {
+
+	char readBuffer[80] = "";
+
+	read(pipe[0], readBuffer, sizeof(readBuffer));
+
+	strcpy(msg, readBuffer);
+
+	//WriteToLogFile(pid, msg, 2);
+
+	return 1;
+
+}
+
+
+int WriteToPipe(int pid, int pipe[], char* msg) {
+
+	write(pipe[1], msg, 80);
+
+//	WriteToLogFile(pid, msg, 1);
+
+	return 1;
+
+}
+
+char* ProcessMessage(char msg[]) {
 
 	char cmd = strtok(msg, " ")[0];
 	char* id = strtok(NULL, " ");
 
+	int success = 0;
+	int val = 0;
+	int* valPtr = &val;
+
 	if (id != NULL && strlen(id) > 0) {
 		id = RemoveNewline(id);
 
-		int val;
-
 		switch (cmd) {
 		case 'R':
-			TABLE_READ(id, &val);
+			success = TABLE_READ(id, valPtr);
 			break;
 		case 'U':
 			val = atoi(strtok(NULL, " "));
-			TABLE_UPDATE(id, val);
+			success = TABLE_UPDATE(id, val);
+			break;
+		default:
+			val = -1;
 			break;
 		}
 	} else {
 		//printf("Error processing the command: %s\n -----No ID Provided-----\n",				msg);
+	}
+
+	if (success == -1)
+		return strcat(msg, " FAILED");
+	else {
+
+		char buf[10] = "";
+
+		sprintf(buf, " %d", val);
+
+		return strcat(msg, buf);
 	}
 
 }
@@ -156,30 +207,30 @@ char* RemoveNewline(char* s) {
 	return s;
 }
 
-char* AddNewline(char s[]) {
-
-	char* to;
-
-	if (strlen(s) > 0) {
-		if (s[strlen(s) - 1] != '\n') {
-			char* to = (char*) malloc(sizeof(s) + 1);
-			strcpy(to, s);
-			to[strlen(to) - 1] = '\n';
-		}
-	} else {
-		char* to = (char*) malloc(sizeof(s));
-		strcpy(to, s);
-	}
-
-	return to;
-}
+//char* AddNewline(char s[]) {
+//
+//	char* to;
+//
+//	if (strlen(s) > 0) {
+//		if (s[strlen(s) - 1] != '\n') {
+//			char* to = (char*) malloc(sizeof(s) + 1);
+//			strcpy(to, s);
+//			to[strlen(to) - 1] = '\n';
+//		}
+//	} else {
+//		char* to = (char*) malloc(sizeof(s));
+//		strcpy(to, s);
+//	}
+//
+//	return to;
+//}
 
 int TABLE_READ(char* id, int* val) {
 	int i = 0;
 	for (i = 0; i < _tblSize; i++) {
 		if (strcmp(tbl[i].id, id) == 0) {
-			val = tbl[i].value;
-			printf("tbl[%s] = %d\n", id, val);
+			*val = tbl[i].value;
+			printf("tbl[%s] = %d\n", id, *val);
 			return 1;
 		}
 	}
@@ -192,22 +243,27 @@ int TABLE_UPDATE(char* id, int val) {
 	for (i = 0; i < _tblSize; i++) {
 		if (strcmp(tbl[i].id, id) == 0) {
 			tbl[i].value = val;
-			printf("tbl[%s] = %d\n", tbl[i].id,tbl[i].value );
+			printf("tbl[%s] = %d\n", tbl[i].id, tbl[i].value);
 			return 1;
 		}
 	}
 	return -1;
 }
 
-pid_t ForkProcess(pid_t pid, char* transFileName, int pipe[]) {
+int ForkProcess(int id, char* transFileName, int writePipe[],
+		int responsePipe[]) {
+
+	pid_t pid;
 
 	if ((pid = fork()) == 0) {
 
 		//close read end of pipe for child process
-		close(pipe[0]);
+
+		close(writePipe[0]);
+		close(responsePipe[1]);
 
 		char* filename = transFileName;
-		char input[100];
+		char input[100] = "";
 
 		FILE *fp;
 
@@ -215,28 +271,40 @@ pid_t ForkProcess(pid_t pid, char* transFileName, int pipe[]) {
 
 		while (fgets(input, 100, fp) != NULL) {
 			if (strlen(input) > 0) {
+
 				char* str = input;
 
-				write(pipe[1], str, strlen(str) + 1);
+				WriteToPipe(id, writePipe, str);
+
 				sleep(1);
+				char readBuffer[80];
+
+//				ReadFromPipe(id, responsePipe, readBuffer);
+
 				input[0] = '\0';
 			}
 		}
 
-		write(pipe[1], exitCmd, strlen(exitCmd) + 1);
+		write(writePipe[1], exitCmd, strlen(exitCmd) + 1);
 
 		//printf("exiting child process %d\n", pid);
 
-		close(pipe[1]);
+		close(writePipe[1]);
+		close(responsePipe[1]);
 
 		fclose(fp);
+
+		while (1 == 1) {
+			sleep(1);
+		}
 
 		exit(1);
 		return 0;
 	} else {
 
 		//close write end of pipe for parent process
-		close(pipe[1]);
+		close(writePipe[1]);
+		close(responsePipe[0]);
 
 		int quitLoop = 0;
 
@@ -246,7 +314,48 @@ pid_t ForkProcess(pid_t pid, char* transFileName, int pipe[]) {
 
 }
 
-int KillProcess(pid_t pid) {
+FILE* OpenLogFile() {
+
+	FILE *fp;
+	fp = fopen(logFileName, "a+");
+	return fp;
+}
+
+int WriteToLogFile(int pid, char* msg, short sendRecieve) {
+
+	time_t clock = time(NULL);
+
+	FILE *fp = OpenLogFile();
+
+	char procName[20];
+
+	switch (pid) {
+	case 0:
+		strcpy(procName, "STORE MANAGER");
+		break;
+	case 1:
+		strcpy(procName, "Process 1");
+		break;
+	case 2:
+		strcpy(procName, "Process 2");
+		break;
+
+	}
+
+	fprintf(fp, "%s at time %s %s command %s \n", procName, ctime(&clock),
+			(sendRecieve == 1 ? "sent" : "received"), RemoveNewline(msg));
+
+	fclose(fp);
+	return 1;
+}
+
+int CloseLogFile(FILE* fp) {
+
+	fclose(fp);
+	return 1;
+}
+
+int KillProcess(int pid) {
 	kill(pid, SIGKILL);
 
 	return 0;
@@ -255,7 +364,7 @@ int KillProcess(pid_t pid) {
 int AllocateSharedMemory() {
 
 	if ((tbl = malloc(SIZE * sizeof(TABLE*))) == -1) {
-		//implement fallout for shmget failure
+
 	}
 
 //gets a pointer to the allocated memory
