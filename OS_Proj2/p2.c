@@ -22,7 +22,7 @@
 int LoadTable();
 int ForkProcess();
 int KillProcess(int);
-int AllocateSharedMemory();
+int AllocateMemory();
 int DeallocateSharedMemory();
 char* ProcessMessage(char[]);
 int GetThreadedMessages(int, int[], int[]);
@@ -70,16 +70,13 @@ int main() {
 	pipe(pipe3);
 	pipe(pipe4);
 
-	//allocate shared memory
-	AllocateSharedMemory();
-
-	//load file data into store manager from INIT.DAT
-	LoadTable();
-
 	//fork 2 processes
+
+	pid_t sm_pid = ForkStoreManager();
+	sleep(1);
 	pid_t* p1p = &pid1, p2p = &pid2;
 
-	logFilePointer = OpenLogFile();
+	//logFilePointer = OpenLogFile();
 
 	ForkProcess(1, trans1FileName, pipe1, pipe3);
 	ForkProcess(2, trans2FileName, pipe2, pipe4);
@@ -88,29 +85,16 @@ int main() {
 	int quit = 0;
 	char userInput;
 
-	while (quit == 0) {
-
-		if (pipe1Done == 0)
-			GetThreadedMessages(1, pipe1, pipe3);
-
-		if (pipe2Done == 0)
-			GetThreadedMessages(2, pipe2, pipe4);
-
-		if (pipe1Done != 0 & pipe2Done != 0) {
-			printf("quitting app\n");
-			quit = 1;
-		}
-
-		usleep(100);
-	}
+	//load file data into store manager from INIT.DAT
 
 	//set up signals for each process
 
 	//read input from user until exit
-
+	sleep(20);
 	//deallocates shared memory
 	DeallocateSharedMemory();
 
+	KillProcess(sm_pid);
 	KillProcess(p1);
 	KillProcess(p2);
 
@@ -119,6 +103,44 @@ int main() {
 	return 0;
 }
 
+int ForkStoreManager() {
+
+	pid_t sm_pid;
+
+	int quit = 0;
+
+	switch ((sm_pid = fork())) {
+	case 0:
+
+		//allocate shared memory
+		AllocateMemory();
+
+		LoadTable();
+
+		while (quit == 0) {
+
+			if (pipe1Done == 0)
+				GetThreadedMessages(1, pipe1, pipe3);
+
+			if (pipe2Done == 0)
+				GetThreadedMessages(2, pipe2, pipe4);
+
+			if (pipe1Done != 0 && pipe2Done != 0) {
+				printf("quitting app\n");
+				quit = 1;
+			}
+
+			usleep(100);
+		}
+
+		exit(1);
+
+		break;
+
+	}
+	return sm_pid;
+
+}
 int GetThreadedMessages(int pid, int readPipe[], int writePipe[]) {
 
 	char readBuffer[80];
@@ -338,9 +360,7 @@ FILE* OpenLogFile() {
 
 int WriteToLogFile(FILE* fp, int pid, int proc_id, char* msg, short sendRecieve) {
 
-	//fclose(fp);
-
-	//fp = OpenLogFile();
+	fp = OpenLogFile();
 
 	time_t clock = time(NULL);
 
@@ -370,7 +390,7 @@ int WriteToLogFile(FILE* fp, int pid, int proc_id, char* msg, short sendRecieve)
 	fprintf(fp, "%s at time %s %s command %s \n", procName, timef,
 			(sendRecieve == 1 ? "sent" : "received"), RemoveNewline(msg));
 
-	//fclose(fp);
+	fclose(fp);
 	return 1;
 }
 
@@ -386,7 +406,7 @@ int KillProcess(int pid) {
 	return 0;
 }
 
-int AllocateSharedMemory() {
+int AllocateMemory() {
 
 	if ((tbl = malloc(SIZE * sizeof(TABLE*))) == -1) {
 
