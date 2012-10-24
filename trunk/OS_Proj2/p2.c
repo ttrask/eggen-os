@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <ctype.h>
+#include <signal.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -18,33 +19,20 @@
 #include <fcntl.h>
 #include <sys/shm.h>
 #include <string.h>
-
-int LoadTable();
-int ForkProcess();
-int KillProcess(int);
-int AllocateMemory();
-int DeallocateSharedMemory();
-char* ProcessMessage(char[]);
-int GetThreadedMessages(int, int[], int[]);
-char* RemoveNewline(char*);
-FILE* OpenLogFile();
-int ReadFromPipe(int pid, int proc_id, int pipe[], char msg[]);
-int WriteToPipe(int pid, int proc_id, int pipe[], char* msg);
-int TABLE_UPDATE(char* id, int val);
-int TABLE_READ(char* id, int* val);
-int WriteToLogFile(FILE* fp, int pid, int proc_id, char* msg,
-		short SendRecieved);
-int CloseLogFile(FILE* fp);
+#include "header.h"
 
 #ifndef NULL
 #define NULL   ((void *) 0)
 #endif
 
 FILE* logFilePointer;
+
 char* exitCmd = "exit\n";
-char* logFileName = "LOG.DAT";
-char* trans1FileName = "TRANS1.txt";
-char* trans2FileName = "TRANS2.txt";
+
+char* initFileName = "";
+char* logFileName = "";
+char* trans1FileName = "";
+char* trans2FileName = "";
 const int SIZE = 20;
 int _tblSize = 0;
 
@@ -63,47 +51,92 @@ int p1, p2, storeManager;
 int pipe1[2], pipe2[2], pipe3[2], pipe4[2], nbytes;
 int pipe1Done = 0, pipe2Done = 0;
 
-int main() {
+int main(int argc, char *argv[]) {
 
+	//assume first argument is the application name
+	if (argc < 5) {
+		printf("Error: Invalid number of command line arguments\n");
+		printf("Program expected the following cli arguments\n");
+		printf("./p2 init.file log.file, trans1.file, trans2.file\n");
+		exit(0);
+	}
+
+	int i = 0;
+
+	//Gets CLI Values.  Tanks if values not provided.
+	for (i = 1; i < argc; i++) {
+		//printf("CLI Value:%s\n", argv[i]);
+
+		SetCLIValues(argv[i], i);
+	}
+
+	//open all 4 pipes
 	pipe(pipe1);
 	pipe(pipe2);
 	pipe(pipe3);
 	pipe(pipe4);
 
-	//fork 2 processes
 
+	//fork store manager
 	pid_t sm_pid = ForkStoreManager();
-	sleep(1);
-	pid_t* p1p = &pid1, p2p = &pid2;
+	//printf("Forked Store Manager\n");
 
-	//logFilePointer = OpenLogFile();
+	//wait a sec for the store manager to load the input file.
+	//this is less to do with the store manager doing what it's
+	//supposed to do and more to prevent the forked processes
+	//from executing
+	//sleep(1);
 
-	ForkProcess(1, trans1FileName, pipe1, pipe3);
-	ForkProcess(2, trans2FileName, pipe2, pipe4);
+	pid1 = ForkProcess(1, trans1FileName, pipe1, pipe3);
+	//printf("Forked Process 1\n");
+	pid2 = ForkProcess(2, trans2FileName, pipe2, pipe4);
+	//printf("Forked Process 2\n");
 
-	//CreateStoreManager();
-	int quit = 0;
-	char userInput;
 
-	//load file data into store manager from INIT.DAT
+	GetInputFromUser();
 
-	//set up signals for each process
-
-	//read input from user until exit
-	sleep(20);
 	//deallocates shared memory
-	DeallocateSharedMemory();
 
 	KillProcess(sm_pid);
-	KillProcess(p1);
-	KillProcess(p2);
-
-	CloseLogFile(logFilePointer);
+	KillProcess(pid1);
+	KillProcess(pid2);
 
 	return 0;
 }
 
-int ForkStoreManager() {
+void GetInputFromUser() {
+
+	char userInput[80];
+
+	while (1 == 1) {
+
+		printf(
+				"Press '1' for status of process 1, '2' for status from process 2, or '3' to quit:\n");
+
+		scanf("%s", userInput);
+
+		//userInput = RemoveNewline(userInput);
+
+		if (strcmp(userInput, "1") == 0) {
+			kill(pid1, SIGUSR1);
+
+		} else if (strcmp(userInput, "2") == 0) {
+			kill(pid2, SIGUSR2);
+
+		} else if (strcmp(userInput, "3") == 0) {
+			printf("Exiting Application\n");
+			return;
+		} else {
+			printf("Invalid input!\n");
+		}
+
+		usleep(200);
+
+	}
+
+}
+
+pid_t ForkStoreManager() {
 
 	pid_t sm_pid;
 
@@ -111,6 +144,8 @@ int ForkStoreManager() {
 
 	switch ((sm_pid = fork())) {
 	case 0:
+
+		logFilePointer = OpenLogFile();
 
 		//allocate shared memory
 		AllocateMemory();
@@ -149,26 +184,15 @@ int GetThreadedMessages(int pid, int readPipe[], int writePipe[]) {
 
 	if (strlen(readBuffer) > 0) {
 
-		if (strcmp(readBuffer, exitCmd) == 0) {
-			switch (pid) {
-			case 1:
-				pipe1Done = 1;
-				break;
-			case 2:
-				pipe2Done = 1;
-				break;
-			}
-		}
 
-		printf("Received String from process %d: %s\n", pid,
-				RemoveNewline(readBuffer));
+//		printf("Received String from process %d: %s\n", pid,
+//				RemoveNewline(readBuffer));
+
 		char* msg = ProcessMessage(readBuffer);
 
 		//sends response to write pipe.
 		WriteToPipe(0, 0, writePipe, msg);
 	}
-
-	//free(readBuffer);
 
 	return 0;
 }
@@ -199,6 +223,8 @@ int WriteToPipe(int pid, int proc_id, int pipe[], char* msg) {
 
 char* ProcessMessage(char msg[]) {
 
+	//printf("Received Message '%s' to Process Manger\n", msg);
+
 	int id = atoi(strtok(msg, " "));
 	int pid = atoi(strtok(NULL, " "));
 	char cmd = strtok(NULL, " ")[0];
@@ -228,6 +254,8 @@ char* ProcessMessage(char msg[]) {
 		//printf("Error processing the command: %s\n -----No ID Provided-----\n",				msg);
 	}
 
+	sprintf(msg, "%d %d %c %s", id, pid, cmd, key);
+
 	if (success == -1)
 		return strcat(msg, " FAILED");
 	else {
@@ -256,25 +284,28 @@ int TABLE_READ(char* id, int* val) {
 	for (i = 0; i < _tblSize; i++) {
 		if (strcmp(tbl[i].id, id) == 0) {
 			*val = tbl[i].value;
-			printf("tbl[%s] = %d\n", id, *val);
-			return 1;
+			//printf("tbl[%s] = %d\n", id, *val);
+			return 0;
 		}
 	}
 	return -1;
 }
 
 int TABLE_UPDATE(char* id, int val) {
-	printf("Attempting to Update Table ID %s to value %d\n", id, val);
+//printf("Attempting to Update Table ID %s to value %d\n", id, val);
 	int i = 0;
 	for (i = 0; i < _tblSize; i++) {
 		if (strcmp(tbl[i].id, id) == 0) {
 			tbl[i].value = val;
-			printf("tbl[%s] = %d\n", tbl[i].id, tbl[i].value);
-			return 1;
+			//printf("tbl[%s] = %d\n", tbl[i].id, tbl[i].value);
+			return 0;
 		}
 	}
 	return -1;
 }
+
+int failedCommands = 0;
+int totalCommands = 0;
 
 int ForkProcess(int id, char* transFileName, int writePipe[],
 		int responsePipe[]) {
@@ -290,8 +321,13 @@ int ForkProcess(int id, char* transFileName, int writePipe[],
 		close(writePipe[0]);
 		close(responsePipe[1]);
 
+		signal(SIGUSR1, ShowCurrentStatus);
+		signal(SIGUSR2, ShowCurrentStatus);
+
 		char* filename = transFileName;
 		char input[100] = "";
+
+		logFilePointer = OpenLogFile();
 
 		FILE *fp;
 
@@ -301,9 +337,10 @@ int ForkProcess(int id, char* transFileName, int writePipe[],
 			if (strlen(input) > 0) {
 				char* str = input;
 				char buf[80] = "";
-				printf("attempting to send %s through pipe.", input);
+//				printf("attempting to send %s through pipe.\n",
+//						RemoveNewline(input));
 				sprintf(buf, "%d %d %s", id, p, str);
-				printf("sending %s", buf);
+//				printf("sending %s\n", RemoveNewline(buf));
 				WriteToPipe(id, p, writePipe, buf);
 
 				sleep(1);
@@ -311,11 +348,17 @@ int ForkProcess(int id, char* transFileName, int writePipe[],
 
 				ReadFromPipe(id, p, responsePipe, readBuffer);
 
+				if (strcmp(readBuffer + strlen(readBuffer) - strlen("FAILED"),
+						"FAILED") == 0)
+					failedCommands++;
+
+				totalCommands++;
+
 				input[0] = '\0';
 			}
 		}
 
-		write(writePipe[1], exitCmd, strlen(exitCmd) + 1);
+		//write(writePipe[1], exitCmd, strlen(exitCmd) + 1);
 
 		//printf("exiting child process %d\n", pid);
 
@@ -328,33 +371,43 @@ int ForkProcess(int id, char* transFileName, int writePipe[],
 			sleep(1);
 		}
 
-		exit(1);
 		return 0;
 	} else {
-
-		switch (id) {
-		case 1:
-			pid1 = p;
-			break;
-		case 2:
-			pid2 = p;
-			break;
-		}
 
 		//close write end of pipe for parent process
 		close(writePipe[1]);
 		close(responsePipe[0]);
 
 		//loops until ReadFromPipe is done;
-
+		return p;
 	}
 
+}
+
+void ShowCurrentStatus(int signum) {
+
+//	printf("Reached Signal\n");
+	int id = 0;
+
+	switch (signum) {
+	case SIGUSR1:
+		id = 1;
+		break;
+	case SIGUSR2:
+		id = 2;
+		break;
+	}
+
+	printf("Process %d status %d/%d\n", id, (totalCommands - failedCommands),
+			totalCommands);
+
+	return;
 }
 
 FILE* OpenLogFile() {
 
 	FILE *fp;
-	fp = fopen(logFileName, "a");
+	fp = fopen(logFileName, "a+");
 	return fp;
 }
 
@@ -390,7 +443,8 @@ int WriteToLogFile(FILE* fp, int pid, int proc_id, char* msg, short sendRecieve)
 	fprintf(fp, "%s at time %s %s command %s \n", procName, timef,
 			(sendRecieve == 1 ? "sent" : "received"), RemoveNewline(msg));
 
-	fclose(fp);
+	CloseLogFile(fp);
+
 	return 1;
 }
 
@@ -416,15 +470,10 @@ int AllocateMemory() {
 
 }
 
-int DeallocateSharedMemory() {
-
-	return 0;
-
-}
 
 int LoadTable() {
 
-	char* filename = "INIT.DAT";
+	char* filename = initFileName;
 
 	FILE *fp;
 
@@ -458,10 +507,50 @@ int LoadTable() {
 	int i = 0;
 
 	for (i = 0; i < index; i++) {
-		printf("Input: %s %d\n", tbl[i].id, tbl[i].value);
+//		printf("Input: %s %d\n", tbl[i].id, tbl[i].value);
 	}
 
 	fclose(fp);
+
+	return 0;
+}
+
+void SetCLIValues(char *arg, int i) {
+
+	if (!file_exists(arg)) {
+		printf("File %s does not exist!\n", arg);
+		exit(0);
+	}
+
+	switch (i) {
+	case 1:
+		initFileName = arg;
+		printf("Using %s as Init Store Manager File\n", initFileName);
+
+		break;
+	case 2:
+		logFileName = arg;
+		printf("Using %s as Log File\n", logFileName);
+		break;
+	case 3:
+		trans1FileName = arg;
+		printf("Using %s for Process 1 Transactions\n", trans1FileName);
+		break;
+	case 4:
+		trans2FileName = arg;
+		printf("Using %s for Process 2 Transactions\n", trans2FileName);
+		break;
+	}
+
+	return;
+}
+
+int file_exists(const char * filename) {
+	FILE* file;
+	if (file = fopen(filename, "r")) {
+		fclose(file);
+		return 1;
+	}
 
 	return 0;
 }
