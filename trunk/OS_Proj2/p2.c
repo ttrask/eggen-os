@@ -28,12 +28,19 @@ char* ProcessMessage(char[]);
 int GetThreadedMessages(int, int[], int[]);
 char* RemoveNewline(char*);
 FILE* OpenLogFile();
-int ReadFromPipe(int pid, int pipe[], char msg[]);
-int WriteToPipe(int pid, int pipe[], char* msg);
+int ReadFromPipe(int pid, int proc_id, int pipe[], char msg[]);
+int WriteToPipe(int pid, int proc_id, int pipe[], char* msg);
 int TABLE_UPDATE(char* id, int val);
 int TABLE_READ(char* id, int* val);
-int WriteToLogFile(int pid, char* msg, short SendRecieved);
+int WriteToLogFile(FILE* fp, int pid, int proc_id, char* msg,
+		short SendRecieved);
+int CloseLogFile(FILE* fp);
 
+#ifndef NULL
+#define NULL   ((void *) 0)
+#endif
+
+FILE* logFilePointer;
 char* exitCmd = "exit\n";
 char* logFileName = "LOG.DAT";
 char* trans1FileName = "TRANS1.txt";
@@ -51,7 +58,8 @@ TABLE* tbl;
 int sharedMemId;
 TABLE* sharedMemPtr;
 
-int p1, p2;
+pid_t pid1, pid2;
+int p1, p2, storeManager;
 int pipe1[2], pipe2[2], pipe3[2], pipe4[2], nbytes;
 int pipe1Done = 0, pipe2Done = 0;
 
@@ -69,9 +77,14 @@ int main() {
 	LoadTable();
 
 	//fork 2 processes
-	ForkProcess(p1, trans1FileName, pipe1, pipe3);
-	ForkProcess(p2, trans2FileName, pipe2, pipe4);
+	pid_t* p1p = &pid1, p2p = &pid2;
 
+	logFilePointer = OpenLogFile();
+
+	ForkProcess(1, trans1FileName, pipe1, pipe3);
+	ForkProcess(2, trans2FileName, pipe2, pipe4);
+
+	//CreateStoreManager();
 	int quit = 0;
 	char userInput;
 
@@ -82,6 +95,11 @@ int main() {
 
 		if (pipe2Done == 0)
 			GetThreadedMessages(2, pipe2, pipe4);
+
+		if (pipe1Done != 0 & pipe2Done != 0) {
+			printf("quitting app\n");
+			quit = 1;
+		}
 
 		usleep(100);
 	}
@@ -94,7 +112,9 @@ int main() {
 	DeallocateSharedMemory();
 
 	KillProcess(p1);
-	//KillProcess(p2);
+	KillProcess(p2);
+
+	CloseLogFile(logFilePointer);
 
 	return 0;
 }
@@ -103,7 +123,7 @@ int GetThreadedMessages(int pid, int readPipe[], int writePipe[]) {
 
 	char readBuffer[80];
 
-	ReadFromPipe(0, readPipe, readBuffer);
+	ReadFromPipe(0, 0, readPipe, readBuffer);
 
 	if (strlen(readBuffer) > 0) {
 
@@ -123,7 +143,7 @@ int GetThreadedMessages(int pid, int readPipe[], int writePipe[]) {
 		char* msg = ProcessMessage(readBuffer);
 
 		//sends response to write pipe.
-		WriteToPipe(0, writePipe, msg);
+		WriteToPipe(0, 0, writePipe, msg);
 	}
 
 	//free(readBuffer);
@@ -131,7 +151,7 @@ int GetThreadedMessages(int pid, int readPipe[], int writePipe[]) {
 	return 0;
 }
 
-int ReadFromPipe(int pid, int pipe[], char msg[]) {
+int ReadFromPipe(int pid, int proc_id, int pipe[], char msg[]) {
 
 	char readBuffer[80] = "";
 
@@ -139,18 +159,17 @@ int ReadFromPipe(int pid, int pipe[], char msg[]) {
 
 	strcpy(msg, readBuffer);
 
-	//WriteToLogFile(pid, msg, 2);
+	WriteToLogFile(logFilePointer, pid, proc_id, msg, 2);
 
 	return 1;
 
 }
 
-
-int WriteToPipe(int pid, int pipe[], char* msg) {
+int WriteToPipe(int pid, int proc_id, int pipe[], char* msg) {
 
 	write(pipe[1], msg, 80);
 
-//	WriteToLogFile(pid, msg, 1);
+	WriteToLogFile(logFilePointer, pid, proc_id, msg, 1);
 
 	return 1;
 
@@ -158,23 +177,26 @@ int WriteToPipe(int pid, int pipe[], char* msg) {
 
 char* ProcessMessage(char msg[]) {
 
-	char cmd = strtok(msg, " ")[0];
-	char* id = strtok(NULL, " ");
+	int id = atoi(strtok(msg, " "));
+	int pid = atoi(strtok(NULL, " "));
+	char cmd = strtok(NULL, " ")[0];
+	char* key = strtok(NULL, " ");
 
 	int success = 0;
 	int val = 0;
 	int* valPtr = &val;
 
-	if (id != NULL && strlen(id) > 0) {
-		id = RemoveNewline(id);
+	if (key != NULL && strlen(key) > 0) {
+		key = RemoveNewline(key);
 
 		switch (cmd) {
 		case 'R':
-			success = TABLE_READ(id, valPtr);
+
+			success = TABLE_READ(key, valPtr);
 			break;
 		case 'U':
 			val = atoi(strtok(NULL, " "));
-			success = TABLE_UPDATE(id, val);
+			success = TABLE_UPDATE(key, val);
 			break;
 		default:
 			val = -1;
@@ -207,24 +229,6 @@ char* RemoveNewline(char* s) {
 	return s;
 }
 
-//char* AddNewline(char s[]) {
-//
-//	char* to;
-//
-//	if (strlen(s) > 0) {
-//		if (s[strlen(s) - 1] != '\n') {
-//			char* to = (char*) malloc(sizeof(s) + 1);
-//			strcpy(to, s);
-//			to[strlen(to) - 1] = '\n';
-//		}
-//	} else {
-//		char* to = (char*) malloc(sizeof(s));
-//		strcpy(to, s);
-//	}
-//
-//	return to;
-//}
-
 int TABLE_READ(char* id, int* val) {
 	int i = 0;
 	for (i = 0; i < _tblSize; i++) {
@@ -253,11 +257,13 @@ int TABLE_UPDATE(char* id, int val) {
 int ForkProcess(int id, char* transFileName, int writePipe[],
 		int responsePipe[]) {
 
-	pid_t pid;
+	pid_t p;
 
-	if ((pid = fork()) == 0) {
+	if ((p = fork()) == 0) {
 
 		//close read end of pipe for child process
+
+		p = getpid();
 
 		close(writePipe[0]);
 		close(responsePipe[1]);
@@ -271,15 +277,17 @@ int ForkProcess(int id, char* transFileName, int writePipe[],
 
 		while (fgets(input, 100, fp) != NULL) {
 			if (strlen(input) > 0) {
-
 				char* str = input;
-
-				WriteToPipe(id, writePipe, str);
+				char buf[80] = "";
+				printf("attempting to send %s through pipe.", input);
+				sprintf(buf, "%d %d %s", id, p, str);
+				printf("sending %s", buf);
+				WriteToPipe(id, p, writePipe, buf);
 
 				sleep(1);
 				char readBuffer[80];
 
-//				ReadFromPipe(id, responsePipe, readBuffer);
+				ReadFromPipe(id, p, responsePipe, readBuffer);
 
 				input[0] = '\0';
 			}
@@ -302,11 +310,18 @@ int ForkProcess(int id, char* transFileName, int writePipe[],
 		return 0;
 	} else {
 
+		switch (id) {
+		case 1:
+			pid1 = p;
+			break;
+		case 2:
+			pid2 = p;
+			break;
+		}
+
 		//close write end of pipe for parent process
 		close(writePipe[1]);
 		close(responsePipe[0]);
-
-		int quitLoop = 0;
 
 		//loops until ReadFromPipe is done;
 
@@ -317,15 +332,17 @@ int ForkProcess(int id, char* transFileName, int writePipe[],
 FILE* OpenLogFile() {
 
 	FILE *fp;
-	fp = fopen(logFileName, "a+");
+	fp = fopen(logFileName, "a");
 	return fp;
 }
 
-int WriteToLogFile(int pid, char* msg, short sendRecieve) {
+int WriteToLogFile(FILE* fp, int pid, int proc_id, char* msg, short sendRecieve) {
+
+	//fclose(fp);
+
+	//fp = OpenLogFile();
 
 	time_t clock = time(NULL);
-
-	FILE *fp = OpenLogFile();
 
 	char procName[20];
 
@@ -342,10 +359,18 @@ int WriteToLogFile(int pid, char* msg, short sendRecieve) {
 
 	}
 
-	fprintf(fp, "%s at time %s %s command %s \n", procName, ctime(&clock),
+//remove newline character from timestamp
+	time(&clock);
+
+	char timef[60];
+	strcpy(timef, ctime(&clock));
+
+	timef[strlen(timef) - 1] = '\0';
+
+	fprintf(fp, "%s at time %s %s command %s \n", procName, timef,
 			(sendRecieve == 1 ? "sent" : "received"), RemoveNewline(msg));
 
-	fclose(fp);
+	//fclose(fp);
 	return 1;
 }
 
@@ -367,16 +392,11 @@ int AllocateSharedMemory() {
 
 	}
 
-//gets a pointer to the allocated memory
-
 	return 0;
 
 }
 
 int DeallocateSharedMemory() {
-//deallocates shared memory
-//	shmdt(sharedMemPtr);
-//	shmctl(sharedMemId, IPC_RMID, NULL);
 
 	return 0;
 
