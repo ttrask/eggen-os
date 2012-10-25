@@ -76,7 +76,6 @@ int main(int argc, char *argv[]) {
 	pipe(pipe3);
 	pipe(pipe4);
 
-
 	//fork store manager
 	pid_t sm_pid = ForkStoreManager();
 	//printf("Forked Store Manager\n");
@@ -91,7 +90,6 @@ int main(int argc, char *argv[]) {
 	//printf("Forked Process 1\n");
 	pid2 = ForkProcess(2, trans2FileName, pipe2, pipe4);
 	//printf("Forked Process 2\n");
-
 
 	GetInputFromUser();
 
@@ -185,7 +183,6 @@ int GetThreadedMessages(int pid, int readPipe[], int writePipe[]) {
 
 	if (strlen(readBuffer) > 0) {
 
-
 //		printf("Received String from process %d: %s\n", pid,
 //				RemoveNewline(readBuffer));
 
@@ -234,6 +231,7 @@ char* ProcessMessage(char msg[]) {
 	int success = 0;
 	int val = 0;
 	int* valPtr = &val;
+	char* valStr = "";
 
 	if (key != NULL && strlen(key) > 0) {
 		key = RemoveNewline(key);
@@ -244,15 +242,25 @@ char* ProcessMessage(char msg[]) {
 			success = TABLE_READ(key, valPtr);
 			break;
 		case 'U':
-			val = atoi(strtok(NULL, " "));
-			success = TABLE_UPDATE(key, val);
+			valStr = strtok(NULL, " ");
+
+			if (strlen(valStr) > 0) {
+				if (isNumeric(valStr)) {
+					val = atoi(valStr);
+					success = TABLE_UPDATE(key, val);
+				} else
+					success = -1;
+			} else {
+				success = -1;
+			}
 			break;
+
 		default:
-			val = -1;
+			success = -1;
 			break;
 		}
 	} else {
-		//printf("Error processing the command: %s\n -----No ID Provided-----\n",				msg);
+		success = -1;
 	}
 
 	sprintf(msg, "%d %d %c %s", id, 0, cmd, key);
@@ -471,7 +479,6 @@ int AllocateMemory() {
 
 }
 
-
 int LoadTable() {
 
 	char* filename = initFileName;
@@ -520,7 +527,7 @@ void SetCLIValues(char *arg, int i) {
 
 	//check if the specified file exists
 	//don't check if the log file exists.
-	if (i!= 2 && !file_exists(arg)) {
+	if (i != 2 && !file_exists(arg)) {
 		printf("File %s does not exist!\n", arg);
 		exit(0);
 	}
@@ -546,6 +553,14 @@ void SetCLIValues(char *arg, int i) {
 	}
 
 	return;
+}
+
+int isNumeric(const char * s) {
+	if (s == NULL || *s == '\0' || isspace(*s))
+		return 0;
+	char * p;
+	strtod(s, &p);
+	return *p == '\0';
 }
 
 int file_exists(const char * filename) {
