@@ -176,6 +176,7 @@ pid_t ForkStoreManager() {
 	return sm_pid;
 
 }
+
 int GetThreadedMessages(int pid, int readPipe[], int writePipe[]) {
 
 	char readBuffer[80];
@@ -254,7 +255,7 @@ char* ProcessMessage(char msg[]) {
 		//printf("Error processing the command: %s\n -----No ID Provided-----\n",				msg);
 	}
 
-	sprintf(msg, "%d %d %c %s", id, pid, cmd, key);
+	sprintf(msg, "%d %d %c %s", id, 0, cmd, key);
 
 	if (success == -1)
 		return strcat(msg, " FAILED");
@@ -517,7 +518,9 @@ int LoadTable() {
 
 void SetCLIValues(char *arg, int i) {
 
-	if (!file_exists(arg)) {
+	//check if the specified file exists
+	//don't check if the log file exists.
+	if (i!= 2 && !file_exists(arg)) {
 		printf("File %s does not exist!\n", arg);
 		exit(0);
 	}

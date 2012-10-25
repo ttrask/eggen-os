@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+
 int main_fork() {
 	int j;
 	int N = 5;
@@ -17,4 +18,5 @@ int main_fork() {
 			printf("parent process runs here. j=%d, id=%d parent pid %d \n\n",
 					j, child1_pid[j], getpid());
 		}
+	return 0;
 }

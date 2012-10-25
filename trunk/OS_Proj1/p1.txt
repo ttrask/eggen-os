@@ -1,0 +1,23 @@
+		Title: Project 1
+		Class: Operating Systems
+	Professor: Dr. Roger Eggen
+   Difficulty: Very (I hate you, race conditions)
+   Created on: October 4, 2012
+       Author: Thomas Trask
+      Purpose: To demonstrate an understanding of semaphores, shared memory access and process multitasking.
+  Methodology: The application hinges around a queue that is opened in shared memory.
+  				The applicatoin then generates a set of producers and consumers to add and remove data from this
+  				queue.  When a producer or consumer needs access to the queue, they wait until access is given.
+  				Once access is given (via a semaphore), the process does what it needs to and releases the lock it has on the
+  				queue.  There are 2 ohter semaphores used; one to notify each process if the queue is full and
+  				one to notify the user if the queue is empty.
+ 
+  				Unfortunately, the way that the application has been coded does not yield predictable performance.
+  				Running the application may take no time at all; other times, running it will take a minute or more.
+  				I do realize that this is slightly unacceptable but, give it time.  The app will get done.
+CLI Arguemnts: THe user supplies 3 arguments:
+					<Number of producers>
+					<Number of Consumers>
+					<Number of items each producer produces>
+				if these 3 arguments are not provided the application will tell you so.
+ 
