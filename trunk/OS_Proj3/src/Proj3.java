@@ -1,3 +1,4 @@
+import java.util.Date;
 import java.util.List;
 import java.util.Random;
 import java.io.BufferedReader;
@@ -12,6 +13,7 @@ public class Proj3 {
 	static int[] _callStack;
 	static String _dataFileName = "data.dat";
 	static String _pagingAlgorithm = "FIFO";
+
 	static Boolean _suppressDebugOutput = false;
 	static Page[] _pageSet = null;
 	static int _callstackSize = 100;
@@ -27,12 +29,67 @@ public class Proj3 {
 		GenerateCallStack();
 
 		println("Successfully generated callstack on data");
+
+		ProcessWorkingSet();
+	}
+
+	public static void ProcessWorkingSet() {
+
+		List<Page> workingSet = new ArrayList<Page>();
+
+		for (int i = 0; i < _callStack.length; i++) {
+
+			Page page = _pageSet[_callStack[i]];
+
+			if (workingSet.size() < _workingSetSize) {
+
+				page.AddedToStack = new Date();
+				page.LastAccessed = page.AddedToStack;
+
+				workingSet.add(page);
+
+			} else {
+				switch (_pagingAlgorithm.toLowerCase()) {
+
+				case "fifo":
+					ReplaceWorkingSetFIFO(workingSet, page);
+					break;
+				case "optimal":
+					break;
+				case "clock":
+					break;
+				case "lru":
+					break;
+				}
+
+			}
+		}
+	}
+
+	protected static boolean ReplaceWorkingSetFIFO(List<Page> ws, Page newPage) {
+
+		return true;
+	}
+
+	protected static boolean ReplaceWorkingSetOpt(List<Page> ws, Page newPage) {
+
+		return true;
+	}
+
+	protected static boolean ReplaceWorkingSetClock(List<Page> ws, Page newPage) {
+
+		return true;
+	}
+
+	protected static boolean ReplaceWorkingSetLRU(List<Page> ws, Page newPage) {
+
+		return true;
 	}
 
 	public static boolean GenerateCallStack() {
 
 		_callStack = new int[_callstackSize];
-		
+
 		try {
 			for (int i = 0; i < _callstackSize; i++) {
 				_callStack[i] = new Random().nextInt(_pageSet.length);
@@ -40,7 +97,7 @@ public class Proj3 {
 		} catch (Exception ex) {
 			return false;
 		}
-		
+
 		return true;
 
 	}
@@ -149,5 +206,4 @@ public class Proj3 {
 			return false;
 		}
 	}
-
 }
