@@ -1,104 +1,319 @@
 import java.util.Date;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.ArrayList;
 
 public class Proj3 {
 
-	static int _pageSize = 20;
-	static int _workingSetSize = 4;
+	static int _pageSize = 10;
+	static int _workingSetSize = 3;
 	static int[] _callStack;
 	static String _dataFileName = "data.dat";
-	static String _pagingAlgorithm = "FIFO";
+	static String _pagingAlgorithm = "clock";
+	static String _callStackFileName = "callStack.dat";
 
-	static Boolean _suppressDebugOutput = false;
+	static Boolean _suppressDebugOutput = true;
 	static Page[] _pageSet = null;
-	static int _callstackSize = 100;
+	static int _callstackSize = 500;
 
 	public static void main(String[] args) throws IOException {
 
-		ParseCLIArgs(args);
+		// ParseCLIArgs(args);
 
 		LoadDataIntoPages();
 
 		println("Successfully loaded data into pageset");
 
-		GenerateCallStack();
+		LoadCallStack();
+	   
+		//GenerateCallStack();
 
 		println("Successfully generated callstack on data");
 
-		ProcessWorkingSet();
+		ProcessWorkingSet("fifo");
+		ProcessWorkingSet("lru");
+		ProcessWorkingSet("optimal");
+		ProcessWorkingSet("clock");
+		
+		System.exit(0);
 	}
 
 	public static void ProcessWorkingSet() {
 
-		List<Page> workingSet = new ArrayList<Page>();
+		ProcessWorkingSet(_pagingAlgorithm);
+	}
 
-		for (int i = 0; i < _callStack.length; i++) {
+	public static void ProcessWorkingSet(String algorithm) {
+		try {
+			int pageFaults = 0;
 
-			Page page = _pageSet[_callStack[i]];
+			List<Page> workingSet = new LinkedList<Page>();
 
-			if (workingSet.size() < _workingSetSize) {
+			for (int i = 0; i < _callStack.length; i++) {
 
-				page.AddedToStack = new Date();
-				page.LastAccessed = page.AddedToStack;
+				
 
-				workingSet.add(page);
+				Page page = _pageSet[_callStack[i]];
 
-			} else {
-				switch (_pagingAlgorithm.toLowerCase()) {
+				boolean pageFoundInWS = false;
 
-				case "fifo":
-					ReplaceWorkingSetFIFO(workingSet, page);
-					break;
-				case "optimal":
-					break;
-				case "clock":
-					break;
-				case "lru":
+				for (Page p : workingSet) {
+					if (p.pageNumber == page.pageNumber) {
+						// page is already in working set.
+						// no page fault.
+
+						p.LastAccessed = new Date();
+						p.clockRef = 1;
+						pageFoundInWS = true;
+						break;
+					}
+				}
+
+				// if the page isn't in the working set
+				// try to add it
+				if (!pageFoundInWS) {
+
+					pageFaults++;
+
+					if (workingSet.size() < _workingSetSize) {
+
+						page.AddedToStack = new Date();
+						page.LastAccessed = page.AddedToStack;
+						page.clockRef = 1;
+
+						workingSet.add(page);
+
+					} else {
+
+						Thread.sleep(100);
+						// if the workign set is full adn the page isn't in it
+						// yet
+						// go and pull out a page and put a new one in.
+
+						switch (algorithm.toLowerCase()) {
+
+						case "fifo":
+							ReplaceWorkingSetFIFO(workingSet, page);
+							break;
+						case "optimal":
+							int[] futureStack = Arrays.copyOfRange(_callStack,
+									i, _callStack.length);
+							ReplaceWorkingSetOpt(workingSet, page, futureStack);
+							break;
+						case "clock":
+							workingSet = ReplaceWorkingSetClock(workingSet,
+									page);
+							break;
+						case "lru":
+							ReplaceWorkingSetLRU(workingSet, page);
+							break;
+						}
+					}
+
+					String ws = "";
+
+					for (Page p : workingSet) {
+						ws += " " + p.pageNumber;
+					}
+
+					println(ws);
+				}
+			}
+
+			println("Completed parsing working set.");
+			
+			println("Found " + pageFaults + " pagefaults using "+ algorithm, false);
+		} catch (Exception ex) {
+
+		}
+
+		
+
+	}
+
+	protected static List<Page> ReplaceWorkingSetFIFO(List<Page> ws,
+			Page newPage) {
+
+		// instatiates a date to now
+		Date earliestDate = new Date();
+		Page pageToReplace = new Page();
+
+		for (Page p : ws) {
+			if (p.AddedToStack.getTime() < earliestDate.getTime()) {
+				pageToReplace = p;
+				earliestDate = p.AddedToStack;
+			}
+		}
+
+		newPage.AddedToStack = new Date();
+		newPage.LastAccessed = newPage.AddedToStack;
+
+		ws.remove(pageToReplace);
+		ws.add(newPage);
+
+		return ws;
+	}
+
+	protected static boolean ReplaceWorkingSetOpt(List<Page> ws, Page newPage,
+			int[] stack) {
+
+		List<Integer> wsNumbers = new ArrayList<Integer>();
+
+		int furthestPageAway = 0;
+
+		for (Page p : ws) {
+			wsNumbers.add(p.pageNumber);
+		}
+
+		for (int i = 0; i < stack.length; i++) {
+			for (Integer pageNum : wsNumbers) {
+				if (pageNum == stack[i]) {
+					wsNumbers.remove(pageNum);
 					break;
 				}
+			}
+
+			if (wsNumbers.size() == 1) {
+				furthestPageAway = wsNumbers.get(0);
+				break;
+			}
+
+		}
+
+		newPage.AddedToStack = new Date();
+		newPage.LastAccessed = newPage.AddedToStack;
+
+		for (Page p : ws) {
+			if (p.pageNumber == furthestPageAway) {
+				ws.remove(p);
+				ws.add(newPage);
+				break;
 
 			}
 		}
-	}
-
-	protected static boolean ReplaceWorkingSetFIFO(List<Page> ws, Page newPage) {
 
 		return true;
 	}
 
-	protected static boolean ReplaceWorkingSetOpt(List<Page> ws, Page newPage) {
+	protected static List<Page> ReplaceWorkingSetClock(List<Page> ws,
+			Page newPage) {
 
-		return true;
-	}
+		boolean foundVictim = false;
 
-	protected static boolean ReplaceWorkingSetClock(List<Page> ws, Page newPage) {
+		for (int i = 0; i < ws.size(); i++) {
 
-		return true;
+			Page p = ws.get(i);
+
+			if (p.clockRef == 1) {
+
+				// give pages a second chance.
+				p.clockRef = 0;
+
+			} else {
+
+				foundVictim = true;
+
+				// "move the clock" so to speak to the new page and put
+				// everything after it.
+				newPage.clockRef = 1;
+
+				List<Page> newWs = new ArrayList<Page>();
+				newWs.add(newPage);
+
+				if (i < _workingSetSize - 1) {
+					List<Page> pagesAfter = ws.subList(i + 1, ws.size());
+					newWs.addAll(pagesAfter);
+				}
+
+				if (i > 0) {
+					List<Page> pagesBefore = ws.subList(0, i);
+					newWs.addAll(pagesBefore);
+				}
+
+				ws = newWs;
+
+				break;
+			}
+		}
+
+		if (!foundVictim) {
+			return ReplaceWorkingSetClock(ws, newPage);
+		}
+		return ws;
 	}
 
 	protected static boolean ReplaceWorkingSetLRU(List<Page> ws, Page newPage) {
 
+		Date earliestDate = new Date();
+		Page pageToReplace = new Page();
+
+		for (Page p : ws) {
+			if (p.LastAccessed.getTime() < earliestDate.getTime()) {
+				pageToReplace = p;
+				earliestDate = p.LastAccessed;
+			}
+		}
+
+		newPage.AddedToStack = new Date();
+		newPage.LastAccessed = newPage.AddedToStack;
+
+		ws.remove(pageToReplace);
+		ws.add(newPage);
+
 		return true;
+
 	}
 
 	public static boolean GenerateCallStack() {
 
 		_callStack = new int[_callstackSize];
 
+		String s = "";
+		
 		try {
 			for (int i = 0; i < _callstackSize; i++) {
 				_callStack[i] = new Random().nextInt(_pageSet.length);
+				
+				s+= " " + _callStack[i];
 			}
 		} catch (Exception ex) {
 			return false;
 		}
 
+		println(s, false);
+		
 		return true;
+
+	}
+
+	public static void LoadCallStack() {
+		try {
+
+			BufferedReader in = new BufferedReader(new FileReader(
+					_callStackFileName));
+
+			String str;
+			while ((str = in.readLine()) != null) {
+
+				_callStack = new int[str.length()];
+				List<Integer> stack = new ArrayList<Integer>();
+
+				for (int i = 0; i < str.length(); i++) {
+
+					_callStack[i] = Integer.parseInt(str.substring(i, i + 1));
+				}
+
+			}
+			in.close();
+
+		} catch (IOException ex) {
+
+		}
 
 	}
 
@@ -111,12 +326,14 @@ public class Proj3 {
 			String str;
 			while ((str = in.readLine()) != null) {
 
-				int pageCount = str.length() / _pageSize + 1;
+				int pageCount = str.length() / _pageSize;
 
 				_pageSet = new Page[pageCount];
 
 				for (int i = 0; i < pageCount; i++) {
 					Page page = new Page();
+
+					page.pageNumber = i;
 
 					if (str.length() <= (i) * _pageSize) {
 
@@ -171,6 +388,11 @@ public class Proj3 {
 					break;
 
 				_dataFileName = args[2];
+
+				if (args.length <= 3)
+					break;
+
+				_callStackFileName = args[3];
 
 				break;
 

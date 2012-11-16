@@ -11,4 +11,5 @@ public class Page {
 	int size;
 	Date LastAccessed;
 	Date AddedToStack;
+	short clockRef;
 }
