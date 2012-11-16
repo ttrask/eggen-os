@@ -14,41 +14,41 @@
   					   to the STORE MANAGER to read/update the data in the dictionary.
   					4) Have a program available to the user to let it poll each child 
   						process to see how it's going.  
-  				So as an analogy, the Store Manager is an informant that isn't willing
-  				to talk to the CIA, the child processes are 2 interrogater  willing to 
-  				do what the CIA says and the user is, as if need to be said, the CIA,
-  				twisting the screws at will. 
-  				How the application manages this is pretty basic.  Firstly, The main application
-  				creates 4 pipes.  It then creates a new Store manager process using the fork() command.  
-  				The store manager loads up the dictionary specified above using the first CLI argument
-  				(INIT.DAT).  It then goes through a loop, checking the read end of 2 of the pipes specified above
-  				for messages each time. If a message is found, the store manager processes it, as specified
-  				below. 
-  				
-  				Once the store manager has been created, the main process creates 2 more child
-  				processes, p1 & p2.  Each process opens a file (specified by the third and fourth
-  				CLI arguments) and reads it, line by line.  Each line represents a command that 
-  				will be send to the STORE MANAGER.  When a line is read in, it is put in the write 
-  				end of a pipe that the STORE MANAGER will read from.  It then waits around for the 
-  				STORE MANAGER to talk.  
-  				
-  				Once the store manager receives a message through a pipe, it sends it to 
-  				the ProcessMessage function.  It's then parsed out to determine what to do;
-  				the message can either read a key from the dictionary or update a key.  If the
-  				operation succeeds, the STORE MANAGER sends a message through a secondary pipe 
-  				to let the child process know of its conquest.  If the operation fails, the store
-  				manager appends the "FAILED" message to the end of the message.  Once each child process
-  				gets a message back from the STORE MANAGER, they log the effort.  If the operation failed,
-  				the process, destitute, logs the failure.
-  				
-  				Every time a command is sent through a pipe, it is logged to the log file specified 
-  				by the third CLI argument.  
-  				
-  				While this is all going on, the CIA *ahem* user sits by the phone, able to call either 
-  				process to see how many operations have been executed *lol* and how many have
-  				failed *:sadface:*.  When the user indicates that they are done, each child process
-  				is killed and the program exits gracefully and, tired by the exertion goes to get 
-  				a Big Kahuna Burger.        
+				So as an analogy, the Store Manager is an informant that isn't willing
+				to talk to the CIA, the child processes are 2 interrogater  willing to 
+				do what the CIA says and the user is, as if need to be said, the CIA,
+				twisting the screws at will. 
+				How the application manages this is pretty basic.  Firstly, The main application
+				creates 4 pipes.  It then creates a new Store manager process using the fork() command.  
+				The store manager loads up the dictionary specified above using the first CLI argument
+				(INIT.DAT).  It then goes through a loop, checking the read end of 2 of the pipes specified above
+				for messages each time. If a message is found, the store manager processes it, as specified
+				below. 
+				
+				Once the store manager has been created, the main process creates 2 more child
+				processes, p1 & p2.  Each process opens a file (specified by the third and fourth
+				CLI arguments) and reads it, line by line.  Each line represents a command that 
+				will be send to the STORE MANAGER.  When a line is read in, it is put in the write 
+				end of a pipe that the STORE MANAGER will read from.  It then waits around for the 
+				STORE MANAGER to talk.  
+				
+				Once the store manager receives a message through a pipe, it sends it to 
+				the ProcessMessage function.  It's then parsed out to determine what to do;
+				the message can either read a key from the dictionary or update a key.  If the
+				operation succeeds, the STORE MANAGER sends a message through a secondary pipe 
+				to let the child process know of its conquest.  If the operation fails, the store
+				manager appends the "FAILED" message to the end of the message.  Once each child process
+				gets a message back from the STORE MANAGER, they log the effort.  If the operation failed,
+				the process, destitute, logs the failure.
+				
+				Every time a command is sent through a pipe, it is logged to the log file specified 
+				by the third CLI argument.  
+				
+				While this is all going on, the CIA *ahem* user sits by the phone, able to call either 
+				process to see how many operations have been executed *lol* and how many have
+				failed *:sadface:*.  When the user indicates that they are done, each child process
+				is killed and the program exits gracefully and, tired by the exertion goes to get 
+				a Big Kahuna Burger.        
   					 
    Divergance: 	The specification states that when each child process is started, it should open   
     from spec  	the log file.  My application doesn't do that.  Each process writes to the log file

@@ -1,0 +1,10 @@
+Process 1 at time: 2012-10-26 22:22:20 sent R XXXX 
+Store Manager at time: 2012-10-26 22:22:20 received R XXXX 
+Store Manager at time: 2012-10-26 22:22:20 sent 2252 R 1 XXXX 0 
+Proccess 1 at time: 2012-10-26 22:22:21 received 2252 R 1 XXXX 0 
+Process 1 at time: 2012-10-26 22:22:21 sent R  
+Process 1 at time: 2012-10-26 22:26:41 sent R XXXX 
+Store Manager at time: 2012-10-26 22:26:41 received R XXXX 
+Store Manager at time: 2012-10-26 22:26:41 sent 2503 R 1 XXXX 0 
+Proccess 1 at time: 2012-10-26 22:26:42 received 2503 R 1 XXXX 0 
+Process 1 at time: 2012-10-26 22:26:42 sent R  

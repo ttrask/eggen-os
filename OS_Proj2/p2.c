@@ -51,7 +51,7 @@ int p1, p2, storeManager;
 int pipe1[2], pipe2[2], pipe3[2], pipe4[2], nbytes;
 int pipe1Done = 0, pipe2Done = 0;
 
-int main(int argc, char *argv[]) {
+int main_p2(int argc, char *argv[]) {
 
 	//assume first argument is the application name
 	if (argc < 5) {
